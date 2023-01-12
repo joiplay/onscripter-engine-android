@@ -52,9 +52,6 @@ jmethodID   ONScripter::JavaSendReady = NULL;
 jmethodID   ONScripter::JavaReceiveMessage = NULL;
 jmethodID   ONScripter::JavaOnLoadFile = NULL;
 jmethodID   ONScripter::JavaOnFinish = NULL;
-jmethodID   ONScripter::JavaGetFD = NULL;
-jmethodID   ONScripter::JavaGetStat = NULL;
-jmethodID   ONScripter::JavaMkdir = NULL;
 jclass      ONScripter::JavaONScripterClass = NULL;
 
 const char* ONScripter::MESSAGE_SAVE_EXIST = NULL;
@@ -1327,7 +1324,7 @@ void ONScripter::loadEnvData()
 
             // Check if save_dir exists, if not create the folder
             struct stat buf;
-            if ( stat_ons( save_dir, &buf ) != 0 ){
+            if ( stat( save_dir, &buf ) != 0 ){
                 // Does not exist try making it
                 if (mkdir(save_dir, 00755) != 0) {
                     loge(stderr, "Unable to create save directory from envdata");

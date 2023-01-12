@@ -88,6 +88,7 @@ void optionHelp()
     printf( "      --registry file\tset a registry file\n");
     printf( "      --dll file\tset a dll file\n");
     printf( "  -r, --root path\tset the root path to the archives\n");
+    printf( "  -s, --save-folder path\tset the path to saves\n");
     printf( "      --fullscreen\tstart in fullscreen mode\n");
     printf( "      --window\t\tstart in windowed mode\n");
     printf( "      --force-button-shortcut\tignore useescspc and getenter command\n");
@@ -173,61 +174,6 @@ void playVideoAndroid(const char *filename, bool click_flag, bool loop_flag)
     jstring jpath = wrapper.env->NewStringUTF(filename);
     wrapper.env->CallVoidMethod( ONScripter::JavaONScripter, ONScripter::JavaPlayVideo, jpath, click_flag, loop_flag );
     wrapper.env->DeleteLocalRef(jpath);
-}
-
-int stat_ons(const char* path, struct stat *buf)
-{
-    if (!ONScripter::Use_java_io) {
-        return stat(path, buf);
-    }
-
-    JNIWrapper wrapper(ONScripter::JNI_VM);
-    JNIEnv * jniEnv = wrapper.env;
-    jstring jpath = jniEnv->NewStringUTF(path);
-    jlong time = jniEnv->CallLongMethod( ONScripter::JavaONScripter, ONScripter::JavaGetStat, jpath );
-    jniEnv->DeleteLocalRef(jpath);
-
-    if (time == -1) {
-        return -1;
-    }
-    if (buf) {
-        // Convert milliseconds to seconds
-        buf->st_mtime = time / 1000;
-    }
-    return 0;
-}
-
-#undef fopen
-FILE *fopen_ons(const char *path, const char *mode)
-{
-    if (!ONScripter::Use_java_io) {
-        return fopen(path, mode);
-    }
-
-    int mode2 = 0;
-    if (mode[0] == 'w') mode2 = 1;
-
-    JNIWrapper wrapper(ONScripter::JNI_VM);
-    JNIEnv * jniEnv = wrapper.env;
-
-    jstring jpath = jniEnv->NewStringUTF(path);
-    int fd = jniEnv->CallIntMethod( ONScripter::JavaONScripter, ONScripter::JavaGetFD, jpath, mode2 );
-    jniEnv->DeleteLocalRef(jpath);
-    return fdopen(fd, mode);
-}
-
-#undef mkdir
-int mkdir_ons(const char* path, mode_t mode) {
-    if (!ONScripter::Use_java_io) {
-        return mkdir(path, mode);
-    }
-
-    JNIWrapper wrapper(ONScripter::JNI_VM);
-    JNIEnv * jniEnv = wrapper.env;
-    jstring jpath = jniEnv->NewStringUTF(path);
-    int ret = jniEnv->CallIntMethod( ONScripter::JavaONScripter, ONScripter::JavaMkdir, jpath );
-    jniEnv->DeleteLocalRef(jpath);
-    return ret;
 }
 }
 #endif
@@ -356,6 +302,11 @@ int main( int argc, char **argv )
                 argc--;
                 argv++;
                 ons->setArchivePath(argv[0]);
+            }
+            else if ( !strcmp( argv[0]+1, "s" ) || !strcmp( argv[0]+1, "-save-folder" ) ){
+                argc--;
+                argv++;
+                ons->setSaveDir(argv[0]);
             }
             else if ( !strcmp( argv[0]+1, "-fullscreen" ) ){
                 ons->setFullscreenMode();

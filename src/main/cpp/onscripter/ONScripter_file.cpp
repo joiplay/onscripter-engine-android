@@ -56,7 +56,7 @@ void ONScripter::searchSaveFile( SaveFileInfo &save_file_info, int no )
     sprintf( file_name, "%ssave%d.dat", save_dir?save_dir:archive_path, no );
     struct stat buf;
     struct tm *tm;
-    if ( stat_ons( file_name, &buf ) != 0 ){
+    if ( stat( file_name, &buf ) != 0 ){
         save_file_info.valid = false;
         return;
     }
@@ -302,7 +302,7 @@ int ONScripter::saveSaveScreenshot(int no) {
     } else {
         sprintf( screenshot_path, "%s", screenshot_folder );
     }
-    if ( stat_ons( screenshot_path, &buf ) != 0 ){
+    if ( stat( screenshot_path, &buf ) != 0 ){
         // Does not exist try making it
         if (mkdir(screenshot_path, 00755) != 0) {
             fprintf(stderr, "screenshotpath: %s doesn't exist and cannot make it.\n",

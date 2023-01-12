@@ -25,25 +25,6 @@ import javax.microedition.khronos.opengles.GL10;
 class DemoRenderer extends GLSurfaceView_SDL.Renderer {
     public DemoRenderer(@NonNull ONScripterView.Builder builder) {
         mBuilder = builder;
-
-        // Get the tree uri if supported
-        if (ContentResolver.SCHEME_CONTENT.equals(builder.uri.getScheme())) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                mTreeUri = DocumentsContract.buildDocumentUriUsingTree(builder.uri,
-                        DocumentsContract.getTreeDocumentId(builder.uri));
-                mGameDirectory = DocumentsContract.getDocumentId(builder.uri);
-            } else {
-                throw new IllegalStateException("Uri game path is incorrect, content scheme " +
-                        "cannot be used for lower than lollipop");
-            }
-        } else {
-            if (builder.uri.getPath() == null) {
-                throw new NullPointerException("Cannot have null path for game uri "
-                        + builder.uri.toString());
-            }
-            mTreeUri = null;
-            mGameDirectory = builder.uri.getPath();
-        }
     }
 
     @Override
@@ -70,9 +51,7 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer {
         final List<String> flags = new ArrayList<>();
         flags.add("--language");
         flags.add(Locale.getDefault().getLanguage());
-        if (mTreeUri != null) {
-            flags.add("--use-java-io");
-        }
+
         if (openOnly) {
             flags.add("--open-only");
         }
@@ -85,17 +64,21 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer {
         if (mBuilder.useHQAudio) {
             flags.add("--audio-hq");
         }
-        if (mBuilder.fontPath != null) {
-            flags.add("-f");
-            flags.add(mBuilder.fontPath);
-        }
+
+        flags.add("-r");
+        flags.add(mBuilder.gameFolder);
+        flags.add("--save-folder");
+        flags.add(mBuilder.saveFolder);
+        flags.add("-f");
+        flags.add(mBuilder.fontPath);
+
         if (mBuilder.screenshotPath != null) {
             flags.add("--screenshot-path");
             flags.add(mBuilder.screenshotPath);
         }
 
         // If uses file scheme send the directory
-        nativeInit(mTreeUri != null ? null : mGameDirectory, flags.toArray(new String[0]));
+        nativeInit(mBuilder.gameFolder, flags.toArray(new String[0]));
     }
 
     // Called from native code, returns 1 on success, 0 when GL context lost
@@ -137,10 +120,6 @@ class DemoRenderer extends GLSurfaceView_SDL.Renderer {
 
     private final static String TAG = "DemoRenderer";
 
-    @NonNull
-    final String mGameDirectory;
-    @Nullable
-    final Uri mTreeUri;
     @NonNull
     final ONScripterView.Builder mBuilder;
 }
@@ -245,16 +224,6 @@ class DemoGLSurfaceView extends GLSurfaceView_SDL {
 
     protected void onFinish() {
         mExitted = true;
-    }
-
-    @NonNull
-    protected String getGamePath() {
-        return mRenderer.mGameDirectory;
-    }
-
-    @Nullable
-    protected Uri getTreeUri() {
-        return mRenderer.mTreeUri;
     }
 
     private final Runnable mSaveGameSettingsRunnable = new Runnable() {

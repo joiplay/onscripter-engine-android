@@ -322,7 +322,7 @@ int ScriptParser::savedirCommand()
 
 #if defined(LINUX) || defined(MACOSX) || defined(IOS)
         struct stat buf;
-        if ( stat_ons( save_dir, &buf ) != 0 ){
+        if ( stat( save_dir, &buf ) != 0 ){
             // Does not exist try making it
             if (mkdir(save_dir, 00755) != 0) {
                 fprintf(stderr, "savedir: %s doesn't exist and cannot make it.\n", save_dir);

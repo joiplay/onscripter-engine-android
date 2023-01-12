@@ -50,7 +50,7 @@ public class ONScripterView extends DemoGLSurfaceView {
         void autoStateChanged(boolean selected);
         void skipStateChanged(boolean selected);
         void singlePageStateChanged(boolean selected);
-        void videoRequested(@NonNull Uri videoUri, boolean clickToSkip, boolean shouldLoop);
+        void videoRequested(@NonNull String videoPath, boolean clickToSkip, boolean shouldLoop);
         void onNativeError(NativeONSException e, String line, String backtrace);
         void onReady();
         void onUserMessage(UserMessage messageId);
@@ -215,17 +215,13 @@ public class ONScripterView extends DemoGLSurfaceView {
     @Keep
     protected void playVideo(String filepath, boolean clickToSkip, boolean shouldLoop){
         if (!mHasExit && mListener != null) {
-            Uri uri = getUri(filepath);
-            if (!exists(uri)) {
-                // If able to read from parent directory, also check for videos there
-                if (!mRenderer.mBuilder.readParentAssets
-                        || !exists(uri = getUri("../" + filepath))) {
-                    Log.e(TAG, "Cannot play video because it either does not exist. File: " + uri);
-                    return;
-                }
+            File videoFile = new File(filepath);
+            if (!videoFile.exists()) {
+                Log.e(TAG, "Cannot play video because it either does not exist. File: " + filepath);
+                return;
             }
             mIsVideoPlaying = true;
-            mListener.videoRequested(uri, clickToSkip, shouldLoop);
+            mListener.videoRequested(filepath, clickToSkip, shouldLoop);
             mIsVideoPlaying = false;
         }
     }
@@ -284,162 +280,6 @@ public class ONScripterView extends DemoGLSurfaceView {
         });
     }
 
-    /* Called from ONScripter.h */
-    @Keep
-    protected int getFD(String filepath, int mode) {
-        ParcelFileDescriptor pfd;
-        try {
-            final ContentResolver resolver = getContext().getContentResolver();
-            Uri uri = getUri(filepath);
-
-            boolean exists = exists(uri);
-            if (mode == 0 /* Read mode */) {
-                if (!exists) {
-                    // File does not exist
-                    return -1;
-                }
-                pfd = resolver.openFileDescriptor(uri, "r");
-            } else {    // Write Mode
-                if (!exists) {
-                    // File does not exist
-                    if (!createFile(uri)) {
-                        Log.e(TAG, "Unable to create file " + uri);
-                        return -1;
-                    }
-                }
-                pfd = resolver.openFileDescriptor(uri, "rw");
-            }
-
-            if (pfd == null) {
-                Log.v(TAG, "Cannot find pfd");
-                return -1;
-            }
-            return pfd.detachFd();
-        } catch (Exception e) {
-            e.printStackTrace();
-            return -1;
-        }
-    }
-
-    /* Called from ONScripter.h */
-    @Keep
-    protected long getStat(String filepath) {
-        final ContentResolver resolver = getContext().getContentResolver();
-        Uri uri = getUri(filepath);
-
-        // If file scheme, simple return, usually won't run here because can do stat in C
-        boolean isFileScheme = ContentResolver.SCHEME_FILE.equals(uri.getScheme());
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT || isFileScheme) {
-            if (!isFileScheme) {
-                throw new IllegalStateException("Cannot get file because uri is content "+ uri);
-            }
-            return new File(Objects.requireNonNull(uri.getPath())).lastModified();
-        }
-
-        // Use content resolver to get the date last modified and return it
-        final String[] proj = new String[] { DocumentsContract.Document.COLUMN_LAST_MODIFIED };
-        try (final Cursor c = resolver.query(uri, proj,null, null, null)) {
-            if (c != null) {
-                if (c.moveToNext()) {
-                    return c.getLong(c.getColumnIndex(
-                            DocumentsContract.Document.COLUMN_LAST_MODIFIED));
-                }
-            } else {
-                Log.e(TAG, "Failed to resolve self, path: " + uri);
-            }
-        } catch (Exception ignored) {
-        }
-        return -1;
-    }
-
-    /* Called from ONScripter.h */
-    @Keep
-    protected int mkdir(String filepath) {
-        Uri uri = getUri(filepath);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            File file = new File(DocumentsContract.getDocumentId(uri));
-            Uri parentUri = DocumentsContract.buildDocumentUriUsingTree(uri, file.getParent());
-            try {
-                DocumentsContract.createDocument(getContext().getContentResolver(), parentUri,
-                        DocumentsContract.Document.MIME_TYPE_DIR, file.getName());
-            } catch (FileNotFoundException ignored) {
-                return -1;
-            }
-            return 0;
-        } else {
-            return new File(Objects.requireNonNull(uri.getPath())).mkdir() ? 0 : -1;
-        }
-    }
-
-    private boolean createFile(@NonNull Uri uri) throws IOException {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP &&
-                ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) {
-            File file = new File(DocumentsContract.getDocumentId(uri));
-            Uri parentUri = DocumentsContract.buildDocumentUriUsingTree(uri, file.getParent());
-
-            // Create the parent folder if it does not exist
-            if (!exists(parentUri)) {
-                String parentParentPath = file.getParentFile().getParent();
-                if (parentParentPath != null) {
-                    Uri parentParentUri = DocumentsContract.buildDocumentUriUsingTree(uri,
-                            parentParentPath);
-                    try {
-                        DocumentsContract.createDocument(getContext().getContentResolver(),
-                                parentParentUri, DocumentsContract.Document.MIME_TYPE_DIR,
-                                file.getParentFile().getName());
-                    } catch (FileNotFoundException ignored) {
-                        return false;
-                    }
-                }
-            }
-            DocumentsContract.createDocument(getContext().getContentResolver(), parentUri,
-                    "application/octet-stream", file.getName());
-            return true;
-        } else {
-            return new File(Objects.requireNonNull(uri.getPath())).createNewFile();
-        }
-    }
-
-    @NonNull
-    private Uri getUri(@NonNull String filename) {
-        String path = filename.replace('\\', File.separatorChar);
-        if (path.startsWith(File.separator)) {
-            // Absolute path
-            return Uri.fromFile(new File(path));
-        } else if (path.startsWith(ContentResolver.SCHEME_FILE)
-                || path.startsWith(ContentResolver.SCHEME_CONTENT)) {
-            // Content string
-            return Uri.parse(path);
-        }
-
-        // Relative path from game path, build tree Uri above lollipop otherwise file uri
-        path = getGamePath() + File.separator + path;
-        return getTreeUri() != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
-                ? DocumentsContract.buildDocumentUriUsingTree(getTreeUri(), path)
-                : Uri.fromFile(new File(path));
-    }
-
-    private boolean exists(@NonNull Uri uri) {
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT
-                || ContentResolver.SCHEME_FILE.equals(uri.getScheme())) {
-            return new File(Objects.requireNonNull(uri.getPath())).exists();
-        } else if (getTreeUri() != null) {
-            try (final Cursor c = getContext().getContentResolver().query(uri, null,
-                    null, null, null)) {
-                if (c != null) {
-                    if (c.moveToNext()) {
-                        return true;
-                    }
-                } else {
-                    Log.e(TAG, "Failed to resolve self, path: " + uri);
-                }
-            } catch (Exception ignored) {
-            }
-        }
-        return false;
-    }
-
     private void updateControls(int mode, boolean flag) {
         if (mListener != null) {
             switch(mode) {
@@ -470,8 +310,10 @@ public class ONScripterView extends DemoGLSurfaceView {
         @NonNull
         final Context context;
         @NonNull
-        final Uri uri;
-        @Nullable
+        final String gameFolder;
+        @NonNull
+        final String saveFolder;
+        @NonNull
         String fontPath;
         @Nullable
         String screenshotPath;
@@ -479,9 +321,11 @@ public class ONScripterView extends DemoGLSurfaceView {
         boolean renderOutline;
         boolean readParentAssets;
 
-        public Builder(@NonNull Context context, @NonNull Uri gameUri) {
+        public Builder(@NonNull Context context, @NonNull String gameFolder, @NonNull String saveFolder, @NonNull String fontPath) {
             this.context = context;
-            uri = gameUri;
+            this.gameFolder = gameFolder;
+            this.saveFolder = saveFolder;
+            this.fontPath = fontPath;
         }
 
         public Builder setFontPath(@NonNull String fontPath) {
