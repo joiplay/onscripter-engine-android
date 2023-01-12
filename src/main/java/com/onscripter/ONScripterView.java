@@ -164,8 +164,11 @@ public class ONScripterView extends DemoGLSurfaceView {
      * Send native key press to the app
      * @param keyCode the key to simulate into the game
      */
-    public void sendNativeKeyPress(int keyCode) {
+    public void keyDown(int keyCode) {
         triggerKeyEvent(keyCode, 1);
+    }
+
+    public void keyUp(int keyCode){
         triggerKeyEvent(keyCode, 0);
     }
 
